@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Primer plano del icono adaptativo: el logo cabe en la zona segura de 66 dp. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_logo"
+        android:left="23dp" android:top="23dp" android:right="23dp" android:bottom="23dp"/>
+</layer-list>

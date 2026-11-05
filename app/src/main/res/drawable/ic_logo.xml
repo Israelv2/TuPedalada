@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono "Tu Pedalada" redibujado en vector (05/11/2026) a partir del original de 128 px. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <path android:fillColor="#DA985D" android:pathData="M40,478 L236,428 Q248,425 258,432 L266,437 L300,422 L334,410 Q346,406 356,404 L394,410 L414,396 L466,360 L466,478 Z"/>
+    <path android:strokeColor="#B0BEC5" android:strokeWidth="18" android:fillColor="#00000000"
+        android:pathData="M56,372 a71,71 0 1,0 142,0 a71,71 0 1,0 -142,0"/>
+    <path android:fillColor="#607D8B" android:pathData="M116,372 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0"/>
+    <path android:strokeColor="#B0BEC5" android:strokeWidth="18" android:fillColor="#00000000"
+        android:pathData="M301,318 a72,72 0 1,0 144,0 a72,72 0 1,0 -144,0"/>
+    <path android:fillColor="#607D8B" android:pathData="M362,318 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0"/>
+    <path android:strokeColor="#FFBA57" android:strokeWidth="34" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M214,250 L262,364"/>
+    <path android:fillColor="#5EC08F" android:strokeColor="#5EC08F" android:strokeWidth="6" android:strokeLineJoin="round"
+        android:pathData="M100,212 L170,132 Q186,114 208,122 L284,152 L266,186 L236,172 L190,230 Z"/>
+    <path android:fillColor="#5C6BC0" android:strokeColor="#5C6BC0" android:strokeWidth="6" android:strokeLineJoin="round"
+        android:pathData="M98,214 L190,230 L228,252 L210,286 L136,270 Q102,262 97,238 Z"/>
+    <path android:strokeColor="#FFBA57" android:strokeWidth="32" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M272,168 L338,194"/>
+    <path android:fillColor="#FFBA57" android:pathData="M224,78 a38,38 0 1,0 76,0 a38,38 0 1,0 -76,0"/>
+</vector>
