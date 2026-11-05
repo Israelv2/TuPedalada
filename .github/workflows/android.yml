@@ -24,10 +24,24 @@ jobs:
       - name: Permiso de ejecución para gradlew
         run: chmod +x gradlew
 
+      - name: Clave de firma fija de las betas (desde los secretos del repositorio)
+        env:
+          BETA_KEYSTORE_B64: ${{ secrets.BETA_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$BETA_KEYSTORE_B64" ]; then
+            echo "$BETA_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/beta.jks"
+            echo "BETA_KEYSTORE_PATH=$RUNNER_TEMP/beta.jks" >> "$GITHUB_ENV"
+            echo "Firma fija activada"
+          else
+            echo "Sin secreto BETA_KEYSTORE_B64: se usa la firma de depuración"
+          fi
+
       - name: Pruebas unitarias
         run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Compilar APK de pruebas (beta)
+        env:
+          BETA_KEYSTORE_PASSWORD: ${{ secrets.BETA_KEYSTORE_PASSWORD }}
         run: ./gradlew --no-daemon assembleDebug
 
       - name: Publicar APK
@@ -42,3 +56,4 @@ jobs:
         with:
           name: informe-pruebas
           path: app/build/reports/tests/
+
