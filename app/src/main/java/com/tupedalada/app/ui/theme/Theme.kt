@@ -47,11 +47,18 @@ private val typography = Typography(
 fun TuPedaladaTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = TP.Bike, onPrimary = TP.Bg, secondary = TP.Run, tertiary = TP.Walk,
+            primary = TP.Bike, onPrimary = TP.Bg, secondary = TP.Run, onSecondary = TP.Bg, tertiary = TP.Walk, onTertiary = TP.Bg,
+            primaryContainer = TP.Surface2, onPrimaryContainer = TP.Text,
+            secondaryContainer = TP.Surface2, onSecondaryContainer = TP.Text,
             background = TP.Bg, onBackground = TP.Text, surface = TP.Surface, onSurface = TP.Text,
-            surfaceVariant = TP.Surface2, onSurfaceVariant = TP.Muted, outline = TP.Border, error = TP.Error,
+            surfaceVariant = TP.Surface2, onSurfaceVariant = TP.Muted, outline = TP.Border, outlineVariant = TP.Border,
+            surfaceContainer = TP.Surface, surfaceContainerLow = TP.Surface, surfaceContainerHigh = TP.Surface2,
+            surfaceContainerHighest = TP.Surface2, surfaceContainerLowest = TP.Bg,
+            inverseSurface = TP.Text, inverseOnSurface = TP.Bg, error = TP.Error, onError = TP.Bg,
         ),
         typography = typography,
-        content = content,
-    )
+    ) {
+        // Color de texto por defecto: crema sobre fondo oscuro, en todas las pantallas.
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides TP.Text, content = content)
+    }
 }

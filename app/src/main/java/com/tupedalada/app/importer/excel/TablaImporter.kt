@@ -17,16 +17,38 @@ class TablaImporter(
     private val zone: ZoneId = ZoneId.of("America/Lima"),
     private val sourceFileName: String = "TU PEDALADA.xlsx",
 ) {
+    /**
+     * Columnas reconocidas. Admite los encabezados del Excel histórico y los de la exportación CSV
+     * de Garmin Connect en español e inglés.
+     */
     enum class Field(vararg val headers: String) {
-        TYPE("tipo de actividad"), DATE("fecha"), START("hora comienzo", "comienzo"), END("hora llegada"),
-        ROUTE("ruta"), DISTANCE("distancia"), CALORIES("calorias"),
-        AVG_HR("frecuencia cardiaca media", "fc media"), MAX_HR("fc maxima"),
-        AVG_SPEED("velocidad media", "velocidad med"), MAX_SPEED("velocidad maxima", "velocidad max"),
-        EQUIPMENT("equipo"), TEMP_MIN("temperatura minima", "temp minima"), TEMP_MAX("temperatura maxima", "temp maxima"),
-        MOVING("tiempo en movimiento"), ELAPSED("tiempo transcurrido"),
-        ALT_MIN("altura minima", "altura min"), ALT_MAX("altura maxima", "altura max"),
-        ASCENT("ascenso total"), DESCENT("descenso total"), STRIDE("longitud media de zancada"),
-        STEPS("pasos"), BEST_LAP("mejor tiempo de vuelta"), PACE("ritmo medio"), BEST_PACE("ritmo optimo"),
+        TYPE("tipo de actividad", "activity type", "tipo"),
+        DATE("fecha", "date", "activity date"),
+        START("hora comienzo", "comienzo", "hora de inicio", "start time"),
+        END("hora llegada", "end time"),
+        ROUTE("ruta", "titulo", "title", "activity name", "nombre"),
+        DISTANCE("distancia", "distance"),
+        CALORIES("calorias", "calories"),
+        AVG_HR("frecuencia cardiaca media", "fc media", "avg hr", "average heart rate"),
+        MAX_HR("fc maxima", "frecuencia cardiaca maxima", "max hr", "max heart rate"),
+        AVG_SPEED("velocidad media", "velocidad med", "avg speed", "average speed"),
+        MAX_SPEED("velocidad maxima", "velocidad max", "max speed"),
+        EQUIPMENT("equipo", "gear", "activity gear", "equipamiento"),
+        TEMP_MIN("temperatura minima", "temp minima", "min temp"),
+        TEMP_MAX("temperatura maxima", "temp maxima", "max temp"),
+        MOVING("tiempo en movimiento", "moving time"),
+        ELAPSED("tiempo transcurrido", "elapsed time", "tiempo", "time"),
+        ALT_MIN("altura minima", "altura min", "elevacion minima", "min elevation"),
+        ALT_MAX("altura maxima", "altura max", "elevacion maxima", "max elevation"),
+        ASCENT("ascenso total", "total ascent", "elevation gain"),
+        DESCENT("descenso total", "total descent", "elevation loss"),
+        STRIDE("longitud media de zancada", "avg stride length"),
+        STEPS("pasos", "steps"),
+        BEST_LAP("mejor tiempo de vuelta", "best lap time"),
+        PACE("ritmo medio", "avg pace"),
+        BEST_PACE("ritmo optimo", "mejor ritmo", "best pace"),
+        CADENCE("cadencia media de bicicleta", "cadencia media de pedaleo", "cadencia de carrera media", "cadencia media", "avg bike cadence", "avg run cadence", "avg cadence"),
+        POWER("potencia media", "avg power", "average watts"),
     }
 
     data class RowIssue(val row: Int, val message: String)
@@ -46,16 +68,31 @@ class TablaImporter(
         val unmappedHeaders: List<String>,
     )
 
-    fun preview(rows: List<Map<Int, XlsxReader.Cell>>, existingKeys: Set<String>, sheet: String = "Tabla"): Preview {
+    fun preview(
+        rows: List<Map<Int, XlsxReader.Cell>>,
+        existingKeys: Set<String>,
+        sheet: String = "Tabla",
+        existingLooseKeys: Set<String> = emptySet(),
+    ): Preview {
         require(rows.isNotEmpty()) { "La hoja está vacía" }
         val header = rows.first()
         val colOf = HashMap<Field, Int>()
         val unmapped = ArrayList<String>()
-        header.toSortedMap().forEach { (col, cell) ->
-            val key = CellParsers.headerKey(cell.raw)
-            val field = Field.entries.firstOrNull { f -> f.headers.any { key == it || key.startsWith("$it ") } }
-            if (field != null && field !in colOf) colOf[field] = col else if (key.isNotEmpty()) unmapped += cell.raw
+        val keys = header.toSortedMap().mapValues { CellParsers.headerKey(it.value.raw) }
+        val used = HashSet<Int>()
+        // 1) Coincidencia exacta, respetando el orden de preferencia de los alias de cada campo
+        //    (p. ej. «Tiempo transcurrido» gana a «Tiempo» para el tiempo total).
+        for (f in Field.entries) for (alias in f.headers) {
+            val col = keys.entries.firstOrNull { it.key !in used && it.value == alias }?.key ?: continue
+            colOf[f] = col; used += col; break
         }
+        // 2) Prefijo para variantes abreviadas («Velocidad Med.» → «velocidad med»).
+        for (f in Field.entries) {
+            if (f in colOf) continue
+            val col = keys.entries.firstOrNull { e -> e.key !in used && f.headers.any { it.length > 5 && e.value.startsWith("$it ") } }?.key ?: continue
+            colOf[f] = col; used += col
+        }
+        keys.forEach { (col, key) -> if (col !in used && key.isNotEmpty()) unmapped += header[col]!!.raw }
         val missing = listOf(Field.TYPE, Field.DATE, Field.DISTANCE).filter { it !in colOf }
         require(missing.isEmpty()) { "Faltan columnas obligatorias: ${missing.joinToString()}" }
 
@@ -65,6 +102,7 @@ class TablaImporter(
         val errors = ArrayList<RowIssue>()
         val warnings = ArrayList<RowIssue>()
         val seen = HashSet<String>()
+        val seenLoose = HashSet<String>()
         val equipment = LinkedHashMap<String, Sport>()
         var unknownStart = 0
         var first: LocalDate? = null
@@ -79,7 +117,7 @@ class TablaImporter(
             val sport = sportOf(CellParsers.text(c(Field.TYPE)))
             val date = CellParsers.date(c(Field.DATE))
             val dist = CellParsers.number(c(Field.DISTANCE))
-            if (sport == null) { errors += RowIssue(excelRow, "Tipo de actividad no reconocido: '${c(Field.TYPE)?.raw ?: ""}'"); return@forEachIndexed }
+            if (sport == null) { errors += RowIssue(excelRow, "Modalidad no admitida (solo bici, carrera y caminata): '${c(Field.TYPE)?.raw ?: ""}'"); return@forEachIndexed }
             if (date == null) { errors += RowIssue(excelRow, "Fecha vacía o no válida"); return@forEachIndexed }
 
             val warn = ArrayList<String>()
@@ -89,7 +127,8 @@ class TablaImporter(
                 return value
             }
 
-            val startRaw = CellParsers.timeOfDay(c(Field.START))
+            // En el CSV de Garmin la hora va dentro de la fecha ("2025-08-18 17:55:08").
+            val startRaw = CellParsers.timeOfDay(c(Field.START)) ?: CellParsers.timeInDateText(c(Field.DATE))
             val startKnown = startRaw != null && startRaw != LocalTime.MIDNIGHT
             if (!startKnown) unknownStart++
             val start = date.atTime(if (startKnown) startRaw!! else LocalTime.MIDNIGHT).atZone(zone)
@@ -122,7 +161,9 @@ class TablaImporter(
 
             val key = dedupeKey(sport, date, if (startKnown) startRaw else null, dist, calories, elapsed)
             if (!seen.add(key)) { dupFile += RowIssue(excelRow, "Repetida dentro del Excel (${date} · ${dist ?: "?"} km)"); return@forEachIndexed }
-            if (key in existingKeys) { dupDb += RowIssue(excelRow, "Ya existe en la app (${date} · ${dist ?: "?"} km)"); return@forEachIndexed }
+            val loose = looseKey(sport, start.toInstant().toEpochMilli(), startKnown, dist, zone)
+            if (loose != null && !seenLoose.add(loose)) { dupFile += RowIssue(excelRow, "Repetida dentro del archivo (${date} · ${dist ?: "?"} km)"); return@forEachIndexed }
+            if (key in existingKeys || (loose != null && loose in existingLooseKeys)) { dupDb += RowIssue(excelRow, "Ya existe en la app (${date} · ${dist ?: "?"} km)"); return@forEachIndexed }
             if (dist == null) warn += "sin distancia"
             if (warn.isNotEmpty()) warnings += RowIssue(excelRow, warn.joinToString("; "))
 
@@ -157,6 +198,8 @@ class TablaImporter(
                 bestLapSec = parsed(Field.BEST_LAP, CellParsers.durationSeconds(c(Field.BEST_LAP))),
                 avgPaceSecPerKm = pace,
                 bestPaceSecPerKm = parsed(Field.BEST_PACE, CellParsers.paceSecPerKm(c(Field.BEST_PACE))),
+                avgCadence = parsed(Field.CADENCE, CellParsers.int(c(Field.CADENCE))),
+                avgPowerW = parsed(Field.POWER, CellParsers.int(c(Field.POWER))),
                 sourceRef = "$sourceFileName › $sheet › fila $excelRow",
                 rawOriginal = rawJson(r, headerNames),
                 qualityFlags = q.entries.joinToString(";") { "${it.key}=${it.value.code}" } +
@@ -168,11 +211,25 @@ class TablaImporter(
     }
 
     companion object {
-        fun sportOf(t: String?): Sport? = when (t?.trim()?.uppercase(Locale.ROOT)) {
-            "BIKE", "CICLISMO", "BICI", "CYCLING", "BIKING" -> Sport.BIKE
-            "RUNNING", "CORRER", "CARRERA", "RUN" -> Sport.RUN
-            "WALKING", "CAMINAR", "CAMINATA", "WALK" -> Sport.WALK
-            else -> null
+        /** Modalidad a partir del tipo de actividad (Excel, Garmin Connect en español o inglés). */
+        fun sportOf(t: String?): Sport? {
+            val s = t?.let { CellParsers.headerKey(it) } ?: return null
+            return when {
+                listOf("bike", "bici", "cicl", "cycling", "biking", "mtb", "mountain bik", "gravel").any { it in s } -> Sport.BIKE
+                listOf("run", "carrera", "correr", "trail", "trote").any { it in s } -> Sport.RUN
+                listOf("walk", "camin", "senderismo", "hiking", "hike", "excursion").any { it in s } -> Sport.WALK
+                else -> null
+            }
+        }
+
+        /**
+         * Clave flexible para detectar la misma actividad venga de donde venga (Excel, CSV, FIT):
+         * modalidad + día + hora:minuto + distancia redondeada a 0,1 km. Solo se usa si se conoce la hora.
+         */
+        fun looseKey(sport: Sport, startEpochMs: Long, startKnown: Boolean, km: Double?, zone: ZoneId): String? {
+            if (!startKnown || km == null) return null
+            val t = java.time.Instant.ofEpochMilli(startEpochMs).atZone(zone)
+            return "${sport.name}|${t.toLocalDate()}|%02d:%02d|%.1f".format(Locale.ROOT, t.hour, t.minute, km)
         }
 
         /**

@@ -45,26 +45,36 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+private val CSV_MIMES = arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/csv", "application/vnd.ms-excel", "application/octet-stream")
 
 /** Pantalla 05: importación y sincronización. */
 @Composable
-fun ImportScreen(db: AppDatabase, onBack: () -> Unit, onExcelPicked: (Uri) -> Unit) {
+fun ImportScreen(db: AppDatabase, garmin: com.tupedalada.app.garmin.GarminSync, onBack: () -> Unit, onExcelPicked: (Uri) -> Unit, onPending: () -> Unit) {
     val history by db.importDao().syncHistory().collectAsStateWithLifecycle(initialValue = emptyList())
     val pickExcel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(onExcelPicked) }
     Column(Modifier.fillMaxSize().background(TP.Bg)) {
         BackBar("Importar y sincronizar", onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Label("Histórico en Excel")
+            Label("Garmin Connect")
+            GarminCard(db, garmin, onPending)
+            Label("Archivos de actividades")
+            TPCard(Modifier.clickable { pickExcel.launch(CSV_MIMES) }, borderColor = TP.Walk.copy(alpha = 0.5f)) {
+                Text("Importar CSV (Garmin Connect y otros)", fontWeight = FontWeight.SemiBold)
+                Text("El archivo «Activities.csv» que exporta Garmin Connect, en español o inglés. Se omiten las actividades que ya estén en la app.", color = TP.Muted, fontSize = 13.sp)
+            }
             TPCard(Modifier.clickable { pickExcel.launch(arrayOf(XLSX_MIME, "application/octet-stream")) }) {
                 Text("Importar Excel histórico", fontWeight = FontWeight.SemiBold)
                 Text("Se lee la hoja «Tabla», con vista previa, duplicados y errores. El archivo original se conserva sin cambios.", color = TP.Muted, fontSize = 13.sp)
             }
+            TPCard {
+                Label("Cómo sacar el CSV de Garmin Connect")
+                Text("En el navegador: Garmin Connect › Actividades › Todas las actividades › «Exportar CSV» (arriba a la derecha). Para más actividades, baja hasta el final de la lista antes de exportar. Pasa el archivo al teléfono e impórtalo aquí.", color = TP.Muted, fontSize = 13.sp)
+            }
             Label("Dispositivos y servicios")
-            IntegrationRow("Garmin Edge 830", "Importación FIT — beta 2", "Pendiente")
-            IntegrationRow("Garmin Enduro 1", "Importación FIT — beta 2", "Pendiente")
-            IntegrationRow("Health Connect", "Pasos, FC y peso — beta 2", "Pendiente")
-            IntegrationRow("Garmin Connect (API personal)", "Necesita tu clave personal de Garmin — beta 2", "Pendiente")
-            IntegrationRow("Archivos GPX / TCX", "Rutas y entrenamientos — beta 2", "Pendiente")
+            IntegrationRow("Garmin Edge 830 y Enduro 1", "Llegan a través de Garmin Connect (arriba)", "Vía Garmin")
+            IntegrationRow("Recorrido GPS y archivos FIT", "Mapa de cada actividad — próxima beta", "Pendiente")
+            IntegrationRow("Health Connect", "Pasos, FC y peso — próxima beta", "Pendiente")
+            IntegrationRow("Archivos GPX / TCX", "Rutas y entrenamientos — próxima beta", "Pendiente")
             if (history.isNotEmpty()) {
                 Label("Historial de sincronización")
                 TPCard {
@@ -87,11 +97,65 @@ fun ImportScreen(db: AppDatabase, onBack: () -> Unit, onExcelPicked: (Uri) -> Un
 }
 
 @Composable
+private fun GarminCard(db: AppDatabase, garmin: com.tupedalada.app.garmin.GarminSync, onPending: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val state by garmin.state.collectAsStateWithLifecycle()
+    val pending by db.activityDao().pendingCount().collectAsStateWithLifecycle(initialValue = 0)
+    var hasKey by remember { mutableStateOf(garmin.client.hasKey) }
+    var keyInput by remember { mutableStateOf("") }
+    var keyError by remember { mutableStateOf<String?>(null) }
+    var last by remember { mutableStateOf<Long?>(null) }
+    androidx.compose.runtime.LaunchedEffect(state) { last = garmin.lastSyncMs() }
+    val f = remember { SimpleDateFormat("dd/MM/yyyy HH:mm") }
+
+    TPCard(borderColor = TP.Bike.copy(alpha = 0.5f)) {
+        if (!hasKey) {
+            Text("Conectar con tu clave personal", fontWeight = FontWeight.SemiBold)
+            Text("Pega la clave que creaste en Garmin Connect web › Ajustes › Personal API Key. Se guarda cifrada en el teléfono y nunca sale de él salvo hacia Garmin.", color = TP.Muted, fontSize = 13.sp)
+            androidx.compose.material3.OutlinedTextField(
+                keyInput, { keyInput = it; keyError = null },
+                label = { Text("Clave personal de Garmin") }, singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            keyError?.let { Text(it, color = TP.Error, fontSize = 13.sp) }
+            Button(onClick = {
+                runCatching { garmin.client.saveKey(keyInput) }
+                    .onSuccess { hasKey = true; keyInput = ""; scope.launch { garmin.syncIfPossible(force = true) } }
+                    .onFailure { keyError = it.message }
+            }, enabled = keyInput.isNotBlank(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp)) { Text("Guardar y sincronizar") }
+        } else {
+            Row {
+                Column(Modifier.weight(1f)) {
+                    Text("Conectado con tu clave personal", fontWeight = FontWeight.SemiBold)
+                    Text("Última sincronización: " + (last?.let { f.format(Date(it)) } ?: "nunca"), color = TP.Muted, fontSize = 13.sp)
+                }
+                Text("Activo", color = TP.Walk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            when (val s = state) {
+                com.tupedalada.app.garmin.GarminSync.State.Running -> Row(Modifier.padding(top = 8.dp)) { CircularProgressIndicator(Modifier.height(20.dp)); Text("  Buscando actividades nuevas…") }
+                is com.tupedalada.app.garmin.GarminSync.State.Done -> Text(
+                    "${s.newOnes} nuevas · ${s.duplicates} ya estaban" + if (s.skippedTypes > 0) " · ${s.skippedTypes} de otras modalidades" else "",
+                    color = TP.Walk, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+                is com.tupedalada.app.garmin.GarminSync.State.Failed -> Text(s.message, color = TP.Error, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+                else -> Unit
+            }
+            if (pending > 0) Button(onClick = onPending, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Confirmar $pending actividades nuevas") }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { scope.launch { garmin.syncIfPossible(force = true) } }, enabled = state != com.tupedalada.app.garmin.GarminSync.State.Running) { Text("Sincronizar ahora") }
+                OutlinedButton(onClick = { garmin.client.deleteKey(); hasKey = false }) { Text("Quitar clave") }
+            }
+            Text("Se sincroniza sola cada vez que abres la app (con internet).", color = TP.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
 private fun IntegrationRow(title: String, sub: String, status: String) {
     TPCard {
         Row {
             Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Text(sub, color = TP.Muted, fontSize = 13.sp) }
-            Text(status, color = TP.Warn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(status, color = if (status == "Pendiente") TP.Warn else TP.Walk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -107,7 +171,7 @@ fun ExcelWizardScreen(repo: ImportRepository, uri: Uri, onBack: () -> Unit, onDo
     androidx.compose.runtime.LaunchedEffect(uri) { prepared = repo.prepare(uri) }
 
     Column(Modifier.fillMaxSize().background(TP.Bg)) {
-        BackBar("Importar Excel histórico", onBack)
+        BackBar(if (prepared?.format == "CSV") "Importar CSV" else "Importar archivo", onBack)
         val p = prepared
         if (p == null) {
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
@@ -122,7 +186,7 @@ fun ExcelWizardScreen(repo: ImportRepository, uri: Uri, onBack: () -> Unit, onDo
                 if (p.sheets.isNotEmpty()) Text("Hojas: " + p.sheets.joinToString(" · "), color = TP.Muted, fontSize = 12.sp)
             }
             if (p.alreadyImported) Banner("Este mismo archivo ya se importó antes. Las filas repetidas se detectarán como duplicadas.", TP.Warn)
-            p.error?.let { Banner("No se pudo leer la hoja «Tabla»: $it") }
+            p.error?.let { Banner(if (p.format == "CSV") "No se pudo leer el CSV: $it" else "No se pudo leer la hoja «Tabla»: $it") }
             val pv = p.preview ?: return@Column
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Count("válidas", pv.valid.size, TP.Walk, Modifier.weight(1f))

@@ -23,11 +23,32 @@ object CellParsers {
 
     fun number(c: XlsxReader.Cell?, integerContext: Boolean = false): Double? {
         if (isEmpty(c)) return null
-        val t = c!!.raw.trim()
+        val t = c!!.raw.trim().replace(" ", "").replace(" ", "")
         if (c.isNumber) return t.toDoubleOrNull()
         if (integerContext && THOUSANDS.matches(t)) return t.replace(".", "").toDoubleOrNull()
-        val normalized = if (t.contains(',')) t.replace(".", "").replace(',', '.') else t
+        if (integerContext && THOUSANDS_COMMA.matches(t)) return t.replace(",", "").toDoubleOrNull()
+        val hasDot = t.contains('.'); val hasComma = t.contains(',')
+        val normalized = when {
+            // Ambos separadores: el último es el decimal ("1.234,5" o "1,234.5").
+            hasDot && hasComma -> if (t.lastIndexOf(',') > t.lastIndexOf('.')) t.replace(".", "").replace(',', '.') else t.replace(",", "")
+            hasComma -> t.replace(',', '.')
+            else -> t
+        }
         return normalized.toDoubleOrNull()
+    }
+
+    private val THOUSANDS_COMMA = Regex("""^-?\d{1,3}(,\d{3})+$""")
+
+    /** Hora contenida en un texto de fecha y hora: "2025-08-18 17:55:08" o "18/08/2025 17:55". */
+    fun timeInDateText(c: XlsxReader.Cell?): java.time.LocalTime? {
+        if (isEmpty(c) || c!!.isNumber) {
+            val v = c?.raw?.toDoubleOrNull() ?: return null
+            val frac = v - Math.floor(v)
+            return if (frac > 0) java.time.LocalTime.ofSecondOfDay((frac * 86_400).roundToLong().coerceIn(0, 86_399)) else null
+        }
+        val m = Regex("""(\d{1,2}):(\d{2})(?::(\d{2}))?""").find(c.raw) ?: return null
+        val (h, mi, s) = m.destructured
+        return runCatching { java.time.LocalTime.of(h.toInt(), mi.toInt(), s.ifEmpty { "0" }.toInt()) }.getOrNull()
     }
 
     fun int(c: XlsxReader.Cell?): Int? = number(c, integerContext = true)?.roundToInt()

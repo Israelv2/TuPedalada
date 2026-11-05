@@ -88,8 +88,9 @@ fun SportScreen(db: AppDatabase, sport: Sport, onBack: () -> Unit, onActivity: (
                     else Stat("Calorías", int(items.mapNotNull { it.calories }.sum()), "kcal", Modifier.weight(1f))
                 }
             }
+            HistoryBoxes(db, sport, onActivity)
             TPCard {
-                Row { Label("Últimas actividades"); Spacer(Modifier.weight(1f)); TextButton(onClick = onHistory) { Text("Ver todas") } }
+                Row { Label("Últimas actividades"); Spacer(Modifier.weight(1f)); TextButton(onClick = onHistory) { Text("Buscar con filtros", color = color) } }
                 recent.forEach { a -> ActivityRow(a) { onActivity(a.id) } }
             }
             if (byEq.isNotEmpty()) TPCard {

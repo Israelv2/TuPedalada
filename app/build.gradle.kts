@@ -13,15 +13,29 @@ android {
         applicationId = "com.tupedalada.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-beta1"
+        versionCode = 4
+        versionName = "0.4.0-beta3"
         vectorDrawables { useSupportLibrary = true }
+    }
+
+    // Firma fija de las betas: el almacén de claves NO está en el repositorio; GitHub Actions lo
+    // reconstruye desde los secretos BETA_KEYSTORE_B64 y BETA_KEYSTORE_PASSWORD. Sin ellos se usa
+    // la firma de depuración por defecto (y Android no deja instalar encima de otra versión).
+    val betaKeystore = System.getenv("BETA_KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (betaKeystore != null) create("beta") {
+            storeFile = betaKeystore
+            storePassword = System.getenv("BETA_KEYSTORE_PASSWORD")
+            keyAlias = "tupedalada-beta"
+            keyPassword = System.getenv("BETA_KEYSTORE_PASSWORD")
+        }
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".beta"
             versionNameSuffix = "-debug"
+            if (betaKeystore != null) signingConfig = signingConfigs.getByName("beta")
         }
         release {
             isMinifyEnabled = false
@@ -63,4 +77,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+    // org.json real para las pruebas (en Android lo aporta el sistema).
+    testImplementation("org.json:json:20240303")
 }

@@ -11,7 +11,13 @@ Pasos para el usuario:
 2. Abrir Ajustes › *Personal API Key* (connect.garmin.com/app/settings/personalApiToken).
 3. Pulsar **Create Key**, aceptar los términos y elegir la caducidad.
 4. Copiar la clave: solo se muestra una vez. Guardarla como una contraseña.
-5. En Tu Pedalada (beta 2): Importar › Garmin Connect › pegar la clave. Se guarda cifrada con Android Keystore.
+5. En Tu Pedalada (beta 3): Importar › Garmin Connect › pegar la clave. Se guarda cifrada con Android Keystore.
+
+Implementación (`garmin/`): token con `POST https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token`
+(cabecera `Authorization: ApiKey <clave>`, respuesta = token JWT válido 24 h); actividades con
+`GET /activitylist-service/activities/search/activities?start&limit&startDate&endDate` (cabecera
+`Authorization: Bearer <token>`). Rutas tomadas de la librería oficial de Garmin `garmin-connect-personal-api-python`.
+Unidades: metros, segundos, m/s. La clave caduca según lo elegido al crearla (30 días a 1 año).
 
 Qué da: actividades (resumen JSON y archivo .FIT completo con GPS, FC, cadencia, potencia y vueltas)
 y datos de salud. Limitaciones: solo «pull» (la app pide los datos al abrirse; nada llega solo),

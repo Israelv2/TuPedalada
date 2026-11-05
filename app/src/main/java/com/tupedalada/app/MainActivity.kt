@@ -55,6 +55,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.tupedalada.app.data.db.Sport
 import com.tupedalada.app.ui.screens.AfterActivityScreen
+import com.tupedalada.app.ui.screens.ConfirmScreen
 import com.tupedalada.app.ui.screens.DashboardScreen
 import com.tupedalada.app.ui.screens.DetailScreen
 import com.tupedalada.app.ui.screens.ExcelWizardScreen
@@ -83,9 +84,12 @@ class MainActivity : FragmentActivity() {
         val app = application as TuPedaladaApp
         setContent {
             TuPedaladaTheme {
-                Box(Modifier.fillMaxSize().background(TP.Bg).safeDrawingPadding()) {
-                    if (locked) LockScreen(app.pin) { locked = false; justUnlocked = true }
-                    else AppNav(app, playSplash = justUnlocked.also { justUnlocked = false })
+                // Surface fija el color de texto por defecto en crema: sin ella, todo Text sin color explícito sale negro.
+                androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = TP.Bg, contentColor = TP.Text) {
+                    Box(Modifier.fillMaxSize().background(TP.Bg).safeDrawingPadding()) {
+                        if (locked) LockScreen(app.pin) { locked = false; justUnlocked = true }
+                        else AppNav(app, playSplash = justUnlocked.also { justUnlocked = false })
+                    }
                 }
             }
         }
@@ -116,7 +120,7 @@ private object R0 {
     const val SPLASH = "splash"; const val HOME = "home"; const val HISTORY = "history?sport={sport}"; const val DETAIL = "detail/{id}"
     const val SPORT = "sport/{sport}"; const val IMPORT = "import"; const val EXCEL = "excel"; const val PROFILE = "profile"
     const val WEIGHT = "weight"; const val AFTER = "after/{id}"; const val SETTINGS = "settings"; const val CHANGE_PIN = "changepin"
-    const val PENDING = "pending/{key}"
+    const val PENDING = "pending/{key}"; const val CONFIRM = "confirm"
 }
 
 private val pending = mapOf(
@@ -136,6 +140,9 @@ private fun AppNav(app: TuPedaladaApp, playSplash: Boolean) {
     val current by nav.currentBackStackEntryAsState()
 
     fun go(route: String) { scope.launch { drawer.close() }; nav.navigate(route) { launchSingleTop = true } }
+
+    // Al desbloquear la app: comprobar si hay actividades nuevas en Garmin Connect (requisito 7).
+    androidx.compose.runtime.LaunchedEffect(Unit) { app.garmin.syncIfPossible() }
 
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -168,6 +175,8 @@ private fun AppNav(app: TuPedaladaApp, playSplash: Boolean) {
             composable(R0.SPLASH) { SplashVideoScreen { nav.navigate(R0.HOME) { popUpTo(R0.SPLASH) { inclusive = true } } } }
             composable(R0.HOME) {
                 DashboardScreen(app.db,
+                    garmin = app.garmin,
+                    onPending = { nav.navigate(R0.CONFIRM) },
                     onMenu = { scope.launch { drawer.open() } },
                     onImport = { nav.navigate(R0.IMPORT) },
                     onSport = { nav.navigate("sport/${it.name}") },
@@ -185,7 +194,11 @@ private fun AppNav(app: TuPedaladaApp, playSplash: Boolean) {
                 val s = Sport.valueOf(e.arguments!!.getString("sport")!!)
                 SportScreen(app.db, s, onBack = nav.back(), onActivity = { nav.navigate("detail/$it") }, onHistory = { nav.navigate("history?sport=${s.name}") })
             }
-            composable(R0.IMPORT) { ImportScreen(app.db, onBack = nav.back(), onExcelPicked = { pickedExcel = it; nav.navigate(R0.EXCEL) }) }
+            composable(R0.IMPORT) {
+                ImportScreen(app.db, app.garmin, onBack = nav.back(), onExcelPicked = { pickedExcel = it; nav.navigate(R0.EXCEL) },
+                    onPending = { nav.navigate(R0.CONFIRM) })
+            }
+            composable(R0.CONFIRM) { ConfirmScreen(app.db, onBack = nav.back(), onAfterActivity = { nav.navigate("after/$it") }) }
             composable(R0.EXCEL) {
                 val uri = pickedExcel
                 if (uri == null) androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() } else ExcelWizardScreen(app.imports, uri, onBack = nav.back(), onDone = {

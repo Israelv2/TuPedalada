@@ -62,6 +62,8 @@ import java.time.temporal.TemporalAdjusters
 @Composable
 fun DashboardScreen(
     db: AppDatabase,
+    garmin: com.tupedalada.app.garmin.GarminSync,
+    onPending: () -> Unit,
     onMenu: () -> Unit,
     onImport: () -> Unit,
     onSport: (Sport) -> Unit,
@@ -95,13 +97,26 @@ fun DashboardScreen(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val pendingCount by db.activityDao().pendingCount().collectAsStateWithLifecycle(initialValue = 0)
+            val sync by garmin.state.collectAsStateWithLifecycle()
+            if (pendingCount > 0) {
+                TPCard(Modifier.clickable(onClick = onPending), borderColor = TP.Bike) {
+                    Text("$pendingCount ${if (pendingCount == 1) "actividad nueva" else "actividades nuevas"} de Garmin Connect", fontWeight = FontWeight.SemiBold)
+                    Text("Toca para confirmar modalidad y equipo", color = TP.Muted, fontSize = 13.sp)
+                }
+            }
+            when (val s = sync) {
+                com.tupedalada.app.garmin.GarminSync.State.Running -> Text("Sincronizando con Garmin Connect…", color = TP.Muted, fontSize = 13.sp)
+                is com.tupedalada.app.garmin.GarminSync.State.Failed -> com.tupedalada.app.ui.components.Banner("Garmin: ${s.message}", TP.Warn)
+                else -> Unit
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SportShortcut("Running", Icons.AutoMirrored.Filled.DirectionsRun, Sport.RUN, Modifier.weight(1f), onSport)
                 SportShortcut("Walking", Icons.AutoMirrored.Filled.DirectionsWalk, Sport.WALK, Modifier.weight(1f), onSport)
                 SportShortcut("Biking", Icons.AutoMirrored.Filled.DirectionsBike, Sport.BIKE, Modifier.weight(1f), onSport)
             }
             if (count == 0) {
-                EmptyState("Todavía no hay actividades", "Importa tu histórico de Excel o un archivo FIT de tu Edge 830 / Enduro 1.") {
+                EmptyState("Todavía no hay actividades", "Importa tu histórico de Excel o el CSV que exporta Garmin Connect.") {
                     Button(onClick = onImport) { Text("Importar actividades") }
                 }
                 return@Column

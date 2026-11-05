@@ -1,6 +1,35 @@
-# Estado de la Entrega B — beta 1 (0.2.0-beta1)
+# Estado de la Entrega B
 
-Fecha: 05/11/2026
+## Beta 3 (0.4.0-beta3) · 05/11/2026
+
+- **Sincronización con Garmin Connect** mediante la API personal (clave del usuario, cifrada con
+  Android Keystore). Se ejecuta al desbloquear la app, con internet, como mucho cada 10 minutos, y
+  con el botón «Sincronizar ahora». Pide desde la última sincronización (con 3 días de margen); la
+  primera vez, desde la última actividad guardada.
+- Las actividades nuevas quedan **pendientes de confirmar** (pantalla 06): modalidad y equipo, con el
+  último equipo usado en esa modalidad propuesto por defecto. Después se abre el registro de
+  hidratación (pantalla 17).
+- Sin duplicados: se descartan las que ya existen por su identificador de Garmin o porque coinciden
+  en modalidad, día, hora:minuto y distancia con lo importado del Excel o del CSV.
+- Base de datos v2 con migración que conserva los datos (nuevas columnas `garminActivityId`, `pendingConfirm`).
+- Firma fija de las betas mediante secretos de GitHub: a partir de esta versión las actualizaciones
+  se instalan encima sin perder datos.
+
+## Beta 2 (0.3.0-beta2) · 05/11/2026
+
+Cambios pedidos tras probar la beta 1 en el teléfono:
+
+1. **Textos negros sobre fondo oscuro**: corregido. El color de texto por defecto pasa a crema en
+   toda la app (los textos sin color explícito salían en negro).
+2. **Histórico directo en cada modalidad**: en Running, Walking y Biking aparecen casillas por año;
+   al tocar un año, casillas por mes (los 12, los vacíos apagados); al tocar un mes, sus actividades.
+   El historial con filtros sigue disponible («Buscar con filtros»).
+3. **Importación de CSV**: el «Activities.csv» de Garmin Connect (español o inglés, coma o punto y coma).
+   La hora se toma de la columna Fecha. Los duplicados se detectan también contra lo importado desde
+   el Excel (misma modalidad, día, hora:minuto y distancia). Las modalidades distintas de bici,
+   carrera y caminata (natación, fuerza…) se listan como no admitidas y no se importan.
+
+## Beta 1 (0.2.0-beta1) · 05/11/2026
 
 ## Implementado
 

@@ -133,6 +133,11 @@ data class ActivityEntity(
     val qualityFlags: String = "",
     val dedupeKey: String,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Identificador de la actividad en Garmin Connect (si viene de la API personal). */
+    val garminActivityId: Long? = null,
+    /** true = llegó sola desde Garmin y falta que el usuario confirme modalidad y equipo (pantalla 06). */
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val pendingConfirm: Boolean = false,
 )
 
 @Entity(

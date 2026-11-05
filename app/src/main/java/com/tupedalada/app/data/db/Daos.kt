@@ -18,6 +18,10 @@ data class SportTotals(
 
 data class EquipmentKm(val equipmentName: String?, val km: Double?)
 
+data class LooseRef(val sport: Sport, val startEpochMs: Long, val startTimeKnown: Boolean, val distanceKm: Double?)
+
+data class PeriodTotal(val period: Int, val count: Int, val distanceKm: Double?, val movingSec: Long?)
+
 @Dao
 interface ActivityDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -58,6 +62,49 @@ interface ActivityDao {
     @Query("SELECT dedupeKey FROM activity")
     suspend fun allDedupeKeys(): List<String>
 
+    @Query("SELECT * FROM activity WHERE pendingConfirm = 1 ORDER BY startEpochMs DESC")
+    fun pending(): Flow<List<ActivityEntity>>
+
+    @Query("SELECT COUNT(*) FROM activity WHERE pendingConfirm = 1")
+    fun pendingCount(): Flow<Int>
+
+    @Query("UPDATE activity SET sport = :sport, equipmentId = :equipmentId, equipmentName = :equipmentName, pendingConfirm = 0 WHERE id = :id")
+    suspend fun confirm(id: Long, sport: Sport, equipmentId: Long?, equipmentName: String?)
+
+    @Query("DELETE FROM activity WHERE id = :id AND pendingConfirm = 1")
+    suspend fun discardPending(id: Long)
+
+    @Query("SELECT MAX(startEpochMs) FROM activity")
+    suspend fun lastStartMs(): Long?
+
+    /** Equipo más usado en una modalidad: se propone por defecto al confirmar. */
+    @Query(
+        """SELECT equipmentName FROM activity WHERE sport = :sport AND equipmentName IS NOT NULL AND pendingConfirm = 0
+           GROUP BY equipmentName ORDER BY MAX(startEpochMs) DESC LIMIT 1"""
+    )
+    suspend fun lastEquipmentFor(sport: Sport): String?
+
+    @Query("SELECT sport, startEpochMs, startTimeKnown, distanceKm FROM activity")
+    suspend fun allLooseRefs(): List<LooseRef>
+
+    /** Totales por año (zona horaria del teléfono) para las casillas del histórico. */
+    @Query(
+        """SELECT CAST(strftime('%Y', startEpochMs / 1000, 'unixepoch', 'localtime') AS INTEGER) AS period,
+                  COUNT(*) AS count, SUM(distanceKm) AS distanceKm, SUM(movingSec) AS movingSec
+           FROM activity WHERE sport = :sport GROUP BY period ORDER BY period DESC"""
+    )
+    fun yearTotals(sport: Sport): Flow<List<PeriodTotal>>
+
+    /** Totales por mes (1–12) de un año, para las casillas del histórico. */
+    @Query(
+        """SELECT CAST(strftime('%m', startEpochMs / 1000, 'unixepoch', 'localtime') AS INTEGER) AS period,
+                  COUNT(*) AS count, SUM(distanceKm) AS distanceKm, SUM(movingSec) AS movingSec
+           FROM activity
+           WHERE sport = :sport AND strftime('%Y', startEpochMs / 1000, 'unixepoch', 'localtime') = :year
+           GROUP BY period ORDER BY period"""
+    )
+    fun monthTotals(sport: Sport, year: String): Flow<List<PeriodTotal>>
+
     @Query("SELECT DISTINCT routeName FROM activity WHERE routeName != '' ORDER BY routeName")
     fun routeNames(): Flow<List<String>>
 
@@ -78,6 +125,9 @@ interface EquipmentDao {
 
     @Query("SELECT * FROM equipment WHERE name = :name LIMIT 1")
     suspend fun byName(name: String): EquipmentEntity?
+
+    @Query("SELECT * FROM equipment WHERE sport = :sport AND status != 'RETIRED' ORDER BY name")
+    fun forSport(sport: Sport): Flow<List<EquipmentEntity>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: EquipmentEntity): Long
